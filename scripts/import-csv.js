@@ -3,6 +3,7 @@ const path = require('node:path');
 const { Client } = require('pg');
 
 const rootDir = path.resolve(__dirname, '..');
+const IMPORT_LIMIT = Number(process.env.IMPORT_LIMIT || 100);
 
 loadEnv(path.join(rootDir, '.env'));
 
@@ -37,7 +38,13 @@ function loadEnv(envPath) {
     if (separator === -1) continue;
 
     const key = trimmed.slice(0, separator).trim();
-    const value = trimmed.slice(separator + 1).trim();
+    let value = trimmed.slice(separator + 1).trim();
+    if (
+      (value.startsWith('"') && value.endsWith('"')) ||
+      (value.startsWith("'") && value.endsWith("'"))
+    ) {
+      value = value.slice(1, -1);
+    }
     if (!process.env[key]) process.env[key] = value;
   }
 }
@@ -128,6 +135,13 @@ function buildObservations() {
 
         observations.set(key, observation);
         stationIds.add(stationId);
+
+        if (observations.size >= IMPORT_LIMIT) {
+          return {
+            observations: [...observations.values()],
+            stationIds: [...stationIds].sort(),
+          };
+        }
       }
     }
   }
@@ -139,13 +153,19 @@ function buildObservations() {
 }
 
 async function main() {
-  const client = new Client({
-    host: process.env.DB_HOST || 'localhost',
-    port: Number(process.env.DB_PORT || 5432),
-    user: process.env.DB_USER,
-    password: process.env.DB_PASSWORD,
-    database: process.env.DB_NAME,
-  });
+  const hasDatabaseUrl = Boolean(process.env.DATABASE_URL);
+  const client = hasDatabaseUrl
+    ? new Client({
+        connectionString: process.env.DATABASE_URL,
+        ssl: { rejectUnauthorized: false },
+      })
+    : new Client({
+        host: process.env.DB_HOST || 'localhost',
+        port: Number(process.env.DB_PORT || 5432),
+        user: process.env.DB_USER,
+        password: process.env.DB_PASSWORD,
+        database: process.env.DB_NAME,
+      });
 
   const { observations, stationIds } = buildObservations();
 
@@ -153,6 +173,27 @@ async function main() {
   await client.query('BEGIN');
 
   try {
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS positions (
+        id VARCHAR(50) PRIMARY KEY,
+        name VARCHAR(255) NOT NULL,
+        latitude DOUBLE PRECISION NOT NULL,
+        longitude DOUBLE PRECISION NOT NULL,
+        distance_km DOUBLE PRECISION,
+        type VARCHAR(100)
+      )
+    `);
+
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS position_data (
+        id VARCHAR(50) PRIMARY KEY,
+        station_id VARCHAR(50) NOT NULL REFERENCES positions(id) ON DELETE CASCADE,
+        datetime TIMESTAMP WITH TIME ZONE NOT NULL,
+        salinity DOUBLE PRECISION,
+        water_level DOUBLE PRECISION
+      )
+    `);
+
     for (const stationId of stationIds) {
       const metadata = stationMetadata[stationId] ?? {
         name: stationId,

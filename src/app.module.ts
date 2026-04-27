@@ -11,6 +11,7 @@ import { IPositionRepositoryToken } from './domain/repositories/position.reposit
 import { PositionOrmEntity } from './infrastructure/database/entities/position.orm-entity';
 import { PositionDataOrmEntity } from './infrastructure/database/entities/position-data.orm-entity';
 import { TypeOrmPositionRepository } from './infrastructure/repositories/typeorm-position.repository';
+import { DatabaseBootstrapService } from './infrastructure/database/database-bootstrap.service';
 
 @Module({
   imports: [
@@ -41,6 +42,7 @@ import { TypeOrmPositionRepository } from './infrastructure/repositories/typeorm
   ],
   controllers: [HealthController, PositionController],
   providers: [
+    DatabaseBootstrapService,
     PositionUseCases,
     {
       // Tráo đổi sự phụ thuộc: Từ nay khi app gọi Token này, nó sẽ dùng TypeOrmPositionRepository
