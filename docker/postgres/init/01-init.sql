@@ -16,14 +16,3 @@ CREATE TABLE position_data (
     salinity DOUBLE PRECISION,
     water_level DOUBLE PRECISION
 );
-
--- Đổ sẵn một ít dữ liệu mẫu (Seed data) để test
-INSERT INTO positions (id, name, latitude, longitude, distance_km, type)
-VALUES 
-    ('station-1', 'Trạm A', 10.35, 106.26, 2.5, 'CỐNG'),
-    ('station-2', 'Trạm B', 10.40, 106.30, 5.0, 'TRẠM ĐO');
-
-INSERT INTO position_data (id, station_id, datetime, salinity, water_level)
-VALUES 
-    ('obs-1', 'station-1', '2026-04-24T10:00:00Z', 1.23, 0.45),
-    ('obs-2', 'station-1', '2026-04-24T12:00:00Z', 1.35, 0.50);
