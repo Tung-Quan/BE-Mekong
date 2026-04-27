@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { BadRequestException, Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, Between } from 'typeorm';
 import { IPositionRepository } from '../../domain/repositories/position.repository.interface';
@@ -35,9 +35,12 @@ export class TypeOrmPositionRepository implements IPositionRepository {
     endTime: string,
     positionId: string,
   ): Promise<PositionData[]> {
-    // Ép chuỗi ngày giờ thành Date object để query
-    const start = new Date(`${date}T${startTime}Z`);
-    const end = new Date(`${date}T${endTime}Z`);
+    const start = this.parseApiDateTime(date, startTime);
+    const end = this.parseApiDateTime(date, endTime);
+
+    if (start > end) {
+      throw new BadRequestException('startTime must be before endTime');
+    }
 
     const ormData = await this.dataRepo.find({
       where: {
@@ -57,5 +60,46 @@ export class TypeOrmPositionRepository implements IPositionRepository {
       salinity: d.salinity,
       water_level: d.waterLevel,
     }));
+  }
+
+  private parseApiDateTime(date: string, time: string): Date {
+    const dateMatch = /^(\d{4})-(\d{1,2})-(\d{1,2})$/.exec(date);
+    const timeMatch = /^(\d{1,2}):(\d{2})(?::(\d{2}))?$/.exec(time);
+
+    if (!dateMatch || !timeMatch) {
+      throw new BadRequestException(
+        'Invalid date range. Expected date YYYY-MM-DD and time HH:mm:ss',
+      );
+    }
+
+    const [, year, monthRaw, dayRaw] = dateMatch;
+    const [, hourRaw, minuteRaw, secondRaw = '00'] = timeMatch;
+    const month = Number(monthRaw);
+    const day = Number(dayRaw);
+    const hour = Number(hourRaw);
+    const minute = Number(minuteRaw);
+    const second = Number(secondRaw);
+
+    if (
+      month < 1 ||
+      month > 12 ||
+      day < 1 ||
+      day > 31 ||
+      hour > 23 ||
+      minute > 59 ||
+      second > 59
+    ) {
+      throw new BadRequestException('Invalid date range value');
+    }
+
+    const value = new Date(
+      `${year}-${monthRaw.padStart(2, '0')}-${dayRaw.padStart(2, '0')}T${hourRaw.padStart(2, '0')}:${minuteRaw}:${secondRaw}+07:00`,
+    );
+
+    if (Number.isNaN(value.getTime())) {
+      throw new BadRequestException('Invalid date range value');
+    }
+
+    return value;
   }
 }
